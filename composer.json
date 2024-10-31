@@ -1,0 +1,28 @@
+{
+    "name": "surlabs/aichat",
+    "description": "Ilias AIChat Plugin",
+    "type": "project",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Surlabs\\Aichat\\": "classes/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Juan Manuel De la flor López"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "openai-php/client": "^0.10.2",
+        "symfony/http-client": "^6.4",
+        "nyholm/psr7": "^1.8",
+        "guzzlehttp/guzzle": "^7.9"
+    },
+    "config": {
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
+    }
+}

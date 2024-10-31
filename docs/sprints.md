@@ -39,57 +39,35 @@
 - Thread.php básico funcionando
 - AIChatDatabase.php actualizado
 
-## Sprint 3: Adaptación Modelos Core
+## Sprint 3: Adaptación AIChat y OpenAI Integration
 ### Objetivos
-- Implementar nueva lógica de negocio
-- Adaptar modelos a OpenAI Assistants
+- Simplificar AIChat.php eliminando funcionalidad redundante
+- Integrar OpenAIClient para manejo de threads
 
 ### Tareas
-1. Completar Thread.php
-    - Lógica de threads OpenAI
-    - Gestión de mensajes
-2. Actualizar Message.php
-    - Integración con OpenAI messages
-    - Manejo de message_id
-3. Implementar nuevos getters/setters
+1. Actualizar AIChat.php
+   - Eliminar toda la lógica relacionada con mensajes y chats
+   - Añadir campo y validación de assistant_id
+   - Adaptar getters/setters necesarios
+   - Mantener solo gestión de configuración por instancia
+
+2. Integrar OpenAIClient
+   - Implementar nuevo getLLMResponse() usando threads/runs
+   - Implementar gestión del ciclo de vida de threads
+   - Manejo de errores y timeouts
 
 ### Entregables
-- Modelos core funcionando con OpenAI
-- Integración threads-mensajes completa
+- AIChat.php simplificado
+- Integración OpenAI completa y funcional
 
-## Sprint 4: GUI y Configuración
+## Sprint 4: GUI y API Endpoints
 ### Objetivos
-- Actualizar interfaces de usuario
-- Implementar nueva configuración
+- Adaptar endpoints para trabajar con threads
+- Actualizar interfaz de usuario
 
 ### Tareas
-1. Modificar ilAIChatConfigGUI
-    - Campo assistant_id
-    - Validaciones
-2. Actualizar ilObjAIChatGUI
-    - Nueva lógica de threads
-    - Adaptación API endpoints
-3. Ajustes de interfaz
-
-### Entregables
-- Interfaces actualizadas
-- API endpoints funcionando
-- Configuración completa
-
-## Sprint 5: Migración y Cierre
-### Objetivos
-- Asegurar transición de datos
-- Finalizar implementación
-
-### Tareas
-1. Crear script de migración
-    - Chats a threads
-    - Mensajes a nuevo formato
-2. Pruebas de flujo completo
-3. Corrección de bugs
-4. Documentación
-
-### Entregables
-- Script de migración funcional
-- Sistema completo operativo
-- Documentación actualizada
+1. Modificar ilObjAIChatGUI
+   - Adaptar apiCall() para trabajar con threads
+   - Actualizar processGetApiCall()
+   - Actualizar processPostApiCall()
+   - Actualizar manejo de respuestas

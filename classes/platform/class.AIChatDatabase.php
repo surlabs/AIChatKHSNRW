@@ -33,8 +33,7 @@ class AIChatDatabase
     const ALLOWED_TABLES = [
         'xaic_config',
         'xaic_objects',
-        'xaic_chats',
-        'xaic_messages'
+        'xaic_threads'
     ];
 
     private ilDBInterface $db;

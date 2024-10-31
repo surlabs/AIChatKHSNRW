@@ -7,26 +7,60 @@ use OpenAI;
 use OpenAI\Client;
 use platform\AIChatException;
 
+/**
+ * OpenAIClient - Cliente para interactuar con la API de OpenAI Assistants
+ * @package ai
+ */
 class OpenAIClient
 {
     private Client $client;
     private string $apiKey;
 
+    /**
+     * Constructor del cliente OpenAI
+     * @param string $apiKey API key de OpenAI
+     */
     public function __construct(string $apiKey)
     {
         $this->apiKey = $apiKey;
         $this->initializeClient();
     }
 
-    private function initializeClient(): void
+    /**
+     * Procesa un mensaje a través del Asistente de OpenAI
+     * Este es el método principal que debe usarse para interactuar con el asistente
+     * 
+     * @param string $message Mensaje del usuario
+     * @param string $threadId ID del hilo de conversación
+     * @param string $assistantId ID del asistente de OpenAI
+     * @return array Respuesta del asistente con 'role' y 'content'
+     * @throws AIChatException
+     */
+    public function processMessage(string $message, string $threadId, string $assistantId): array 
     {
-        $this->client = OpenAI::factory()
-            ->withApiKey($this->apiKey)
-            ->withHttpHeader('OpenAI-Beta', 'assistants=v2')
-            ->make();
+        try {
+            $this->createMessage($threadId, $message);
+            $run = $this->createRun($threadId, $assistantId);
+            $this->waitForRunCompletion($threadId, $run['id']);
+            
+            $messages = $this->listThreadMessages($threadId);
+            if (empty($messages['data'])) {
+                throw new AIChatException("No response received from assistant");
+            }
+
+            return [
+                'role' => 'assistant',
+                'content' => $messages['data'][0]['content'][0]['text']['value']
+            ];
+        } catch (\Exception $e) {
+            throw new AIChatException("Error in OpenAI processing: " . $e->getMessage());
+        }
     }
 
     /**
+     * Crea un nuevo hilo de conversación
+     * @param array $messages Mensajes iniciales opcionales
+     * @return array Datos del hilo creado
      * @throws AIChatException
      */
     public function createThread(array $messages = []): array
@@ -36,7 +70,6 @@ class OpenAIClient
             if (!empty($messages)) {
                 $parameters['messages'] = $messages;
             }
-            
             return $this->client->threads()->create($parameters)->toArray();
         } catch (\Exception $e) {
             throw new AIChatException("Error creating thread: " . $e->getMessage());
@@ -44,18 +77,9 @@ class OpenAIClient
     }
 
     /**
-     * @throws AIChatException
-     */
-    public function retrieveThread(string $threadId): array
-    {
-        try {
-            return $this->client->threads()->retrieve($threadId)->toArray();
-        } catch (\Exception $e) {
-            throw new AIChatException("Error retrieving thread: " . $e->getMessage());
-        }
-    }
-
-    /**
+     * Elimina un hilo de conversación
+     * @param string $threadId ID del hilo
+     * @return array Resultado de la eliminación
      * @throws AIChatException
      */
     public function deleteThread(string $threadId): array
@@ -67,10 +91,15 @@ class OpenAIClient
         }
     }
 
-    /**
-     * @throws AIChatException
-     */
-    public function createMessage(string $threadId, string $content, string $role = 'user'): array
+    private function initializeClient(): void
+    {
+        $this->client = OpenAI::factory()
+            ->withApiKey($this->apiKey)
+            ->withHttpHeader('OpenAI-Beta', 'assistants=v2')
+            ->make();
+    }
+
+    private function createMessage(string $threadId, string $content, string $role = 'user'): array
     {
         try {
             return $this->client->threads()->messages()->create(
@@ -85,25 +114,7 @@ class OpenAIClient
         }
     }
 
-    /**
-     * @throws AIChatException
-     */
-    public function retrieveMessage(string $threadId, string $messageId): array
-    {
-        try {
-            return $this->client->threads()->messages()->retrieve(
-                threadId: $threadId,
-                messageId: $messageId
-            )->toArray();
-        } catch (\Exception $e) {
-            throw new AIChatException("Error retrieving message: " . $e->getMessage());
-        }
-    }
-
-    /**
-     * @throws AIChatException
-     */
-    public function createRun(string $threadId, string $assistantId): array
+    private function createRun(string $threadId, string $assistantId): array
     {
         try {
             return $this->client->threads()->runs()->create(
@@ -117,10 +128,7 @@ class OpenAIClient
         }
     }
 
-    /**
-     * @throws AIChatException
-     */
-    public function retrieveRun(string $threadId, string $runId): array
+    private function retrieveRun(string $threadId, string $runId): array
     {
         try {
             return $this->client->threads()->runs()->retrieve(
@@ -133,35 +141,44 @@ class OpenAIClient
     }
 
     /**
+     * Obtiene todos los mensajes de un hilo de conversación
+     * @param string $threadId ID del hilo
+     * @param int $limit Número máximo de mensajes a recuperar (0 = sin límite)
+     * @param string $order Orden de los mensajes ('asc' o 'desc')
+     * @return array Lista de mensajes del hilo
      * @throws AIChatException
      */
-    public function retrieveAssistant(string $assistantId): array
+    public function getThreadMessages(string $threadId, int $limit = 0, string $order = 'asc'): array 
     {
         try {
-            return $this->client->assistants()->retrieve($assistantId)->toArray();
+            $parameters = [
+                'order' => $order
+            ];
+            
+            if ($limit > 0) {
+                $parameters['limit'] = $limit;
+            }
+
+            $messages = $this->client->threads()->messages()->list(
+                threadId: $threadId,
+                parameters: $parameters
+            )->toArray();
+
+            // Transformar los mensajes al formato que espera el frontend
+            return array_map(function($message) {
+                return [
+                    'role' => $message['role'],
+                    'content' => $message['content'][0]['text']['value'],
+                    'created_at' => $message['created_at']
+                ];
+            }, $messages['data']);
+
         } catch (\Exception $e) {
-            throw new AIChatException("Error retrieving assistant: " . $e->getMessage());
+            throw new AIChatException("Error getting thread messages: " . $e->getMessage());
         }
     }
 
-    /**
-     * @throws AIChatException
-     */
-    public function createAndRun(string $assistantId, array $messages): array
-    {
-        try {
-            return $this->client->threads()->createAndRun([
-                'assistant_id' => $assistantId,
-                'thread' => [
-                    'messages' => $messages
-                ]
-            ])->toArray();
-        } catch (\Exception $e) {
-            throw new AIChatException("Error in create and run: " . $e->getMessage());
-        }
-    }
-
-    public function listThreadMessages(string $threadId): array
+    private function listThreadMessages(string $threadId): array
     {
         try {
             return $this->client->threads()->messages()->list(
@@ -176,17 +193,7 @@ class OpenAIClient
         }
     }
 
-    /**
-     * Waits for a run to complete, checking its status periodically
-     *
-     * @param string $threadId The ID of the thread
-     * @param string $runId The ID of the run
-     * @param int $maxAttempts Maximum number of polling attempts (default: 60)
-     * @param int $delaySeconds Delay between polling attempts in seconds (default: 1)
-     * @return array The final run status
-     * @throws AIChatException If the run fails or times out
-     */
-    public function waitForRunCompletion(
+    private function waitForRunCompletion(
         string $threadId,
         string $runId,
         int $maxAttempts = 60,

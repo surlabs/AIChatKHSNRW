@@ -24,7 +24,7 @@ namespace objects;
 use ai\LLM;
 use ai\CustomAI;
 use ai\OpenAI;
-use DateTime;
+use ai\OpenAIClient;
 use platform\AIChatConfig;
 use platform\AIChatDatabase;
 use platform\AIChatException;
@@ -35,6 +35,8 @@ use platform\AIChatException;
  */
 class AIChat
 {
+    private const ASSISTANT_ID = "asst_abc123"; // Valor hardcodeado del assistant_id
+
     private int $id = 0;
     private bool $online = false;
     private string $provider = "";
@@ -47,6 +49,7 @@ class AIChat
     private int $max_memory_messages = 0;
     private string $disclaimer = "";
     private LLM $llm;
+    private ?OpenAIClient $openai_client = null;
 
     public function __construct(?int $id = null)
     {
@@ -240,10 +243,15 @@ class AIChat
         $this->disclaimer = $disclaimer;
     }
 
+    public function getAssistantId(): string 
+    {
+        return self::ASSISTANT_ID;
+    }
+
     /**
      * @throws AIChatException
      */
-    public function getChatsForApi(?int $user_id = null): array
+    public function getThreadsForApi(?int $user_id = null): array
     {
         $database = new AIChatDatabase();
 
@@ -255,22 +263,7 @@ class AIChat
             $where["user_id"] = $user_id;
         }
 
-        $chats = $database->select("xaic_chats", $where, null, "ORDER BY last_update DESC");
-
-        if (empty($chats) && isset($user_id) && $user_id > 0) {
-            $chat = new Chat();
-
-            $chat->setMaxMessages($this->getMaxMemoryMessages());
-
-            $chat->setObjId($this->getId());
-            $chat->setUserId($user_id);
-
-            $chat->save();
-
-            return $this->getChatsForApi($user_id);
-        }
-
-        return $chats;
+        return $database->select("xaic_threads", $where, null, "ORDER BY created_at DESC");
     }
 
     /**
@@ -331,32 +324,63 @@ class AIChat
 
         $database->delete("xaic_objects", ["id" => $this->id]);
 
-        $chats = $database->select("xaic_chats", ["obj_id" => $this->id]);
+        $threads = $database->select("xaic_threads", ["obj_id" => $this->id]);
 
-        foreach ($chats as $chat) {
-            $chat_obj = new Chat($chat["id"]);
-
-            $chat_obj->delete();
+        foreach ($threads as $thread) {
+            $thread_obj = new Thread($thread["id"]);
+            $thread_obj->delete();
         }
     }
 
     /**
      * @throws AIChatException
      */
-    public function getLLMResponse(Chat $chat): Message
+    public function processMessage(string $message, ?Thread $thread = null): array
     {
-        $llm_response = $this->llm->sendChat($chat);
+        if ($this->getProvider() !== "openai") {
+            throw new AIChatException("Only OpenAI provider is supported for now");
+        }
 
-        $response = new Message();
+        // Initialize OpenAI client if not already done
+        if ($this->openai_client === null) {
+            $this->openai_client = new OpenAIClient($this->getApiKey());
+        }
 
-        $response->setChatId($chat->getId());
-        $response->setDate(new DateTime());
-        $response->setRole("assistant");
-        $response->setMessage($llm_response);
+        try {
+            // Si no hay thread, crear uno nuevo tanto local como en OpenAI
+            if ($thread === null) {
+                $thread = new Thread();
+                $thread->setObjId($this->getId());
+                
+                // Obtener el user_id actual
+                global $DIC;
+                $thread->setUserId($DIC->user()->getId());
+            }
 
-        $response->save();
+            // Asegurarse de que tenemos un thread en OpenAI
+            if (empty($thread->getThreadId())) {
+                $result = $this->openai_client->createThread();
+                $thread->setThreadId($result['id']);
+            }
 
-        return $response;
+            // Procesar el mensaje y obtener la respuesta
+            $response = $this->openai_client->processMessage(
+                $message,
+                $thread->getThreadId(),
+                $this->getAssistantId()
+            );
+
+            // Si es un nuevo thread, establecer el título y guardar
+            if ($thread->getId() === 0) {
+                $thread->setTitleFromMessage($message);
+                $thread->save();
+            }
+
+            return $response;
+
+        } catch (\Exception $e) {
+            throw new AIChatException("Error processing message: " . $e->getMessage());
+        }
     }
 
     /**

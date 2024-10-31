@@ -1,3 +1,4 @@
 vendor
 .aider*
 .env
+docs/prompt.md

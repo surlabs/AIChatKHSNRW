@@ -1,5 +1,9 @@
 <?php
 declare(strict_types=1);
+
+require __DIR__ . '/../vendor/autoload.php';
+
+
 /**
  *  This file is part of the AI Chat Repository Object plugin for ILIAS, which allows your platform's users
  *  To connect with an external LLM service
